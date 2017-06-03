@@ -14,8 +14,6 @@ dbname='/var/www/templog.db'
 pad = '/home/hansdej/Sensorlog/rpi_temp_logger-master'
 dbname=pad+'/am2303log.db'
 
-
-
 # print the HTTP header
 def printHTTPheader():
     print("Content-type: text/html\n\n")
@@ -35,7 +33,7 @@ def printHTMLHead(title, table):
     print("</head>")
 
 def unspike( rows ):
-    newrows=rows
+    oldrows=rows.copy()
     # define the numpy dtype:
     dataLength = len(rows[0]) - 1 
     # Assume that the first element is the date and the rest are
@@ -43,9 +41,18 @@ def unspike( rows ):
     dt = tuple( ['str' ] + [ 'float' for i in range(dataLength)] )
     dt = np.dtype( *dt )
     dataArray = np.array(rows, dtype=dt)
+    for serie in range(dataLength):
+        arr = dataArray[:,1+serie].copy() 
+        arr = rolling_median(arr, window=3, center=True)
+        arr = arr[1:-1]
+        dataArray[1:-1,1+serie] = arr
+    # en terug:
+    rows = [ tuple(dataArray[i,:]) for i in range(dataArray.shape[0])]
 
     
-    return newrows
+    return rows
+
+from pandas import rolling_median
 
 # get data from the database
 # if an interval is passed, 
@@ -69,7 +76,6 @@ def get_data(interval):
     rows = unspike(rows)
 
     return rows
-
 
 # convert rows from database into a javascript table
 def create_table(rows):
