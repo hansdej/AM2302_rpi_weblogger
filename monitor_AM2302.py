@@ -1,6 +1,8 @@
 #!/usr/bin/python
 
 import sqlite3
+from sqlalchemy import Column, Integer, String, Table, DataTime
+from sqlalchemy.ext.declarative import declarative_base
 
 import os
 import time
@@ -8,19 +10,28 @@ import glob
 
 import Adafruit_DHT
 
+# Te implementeren:
+# 1) opslaam met smoothing.
+# 2) bijvoegen oude data.
+#       kopieeren oude data naar nieuwe DB
+#       Bijvoegen gladstrijking
+# probreren SQLAlchemy te gebruiken.
 # global variables
 speriod     = (15*60)-1
 pad         = '/home/hansdej/Sensorlog/rpi_temp_logger-master'
 pad         = '/home/hansdej/Sensorlog/AM2302_rpi_weblogger'
-dbname      = pad+'/readings.sqlite'
+dbname      = pad+'/am2302log_smooth.db'
 tablename   = "AM2302"
 columns     = { 'date': 'DATETIME', 'temperature': 'NUMERIC','moisture': 'NUMERIC'}
+## A to be smoothed data storage.
+smooth_columns     = { 'date': 'DATETIME', 'temperature': 'NUMERIC','moisture': 'NUMERIC'}
 # This sqlite database contains a table called "readings"
 # with three columns: timestamp, temp and humid.
 
 # A function to prevent injection.
 def clean_name(some_var):
     return ''.join(char for char in some_var if char.isalnum())
+
 
 class SensorLog():
     """
@@ -31,6 +42,14 @@ class SensorLog():
         self.tablename  = tablename
 
     def make_datatable(self, filename,tablename, tables):
+        # IN the table we need: timestamp. T, H, T_smooth, H_smooth.
+        tables = ["timestamp", "temperature", "humidity", "T_smooth", "H_smooth"]
+        unist = {"timestamp":'DATETIME',
+                "temperature": "NUMERIC",
+                "humidity": "NUMERIC",
+                "T_smooth": "NUMERIC"
+                "H_smooth": "NUMERIC"}
+        
         connection = sqlite3.connect(self.filename)
         cursor     = connection.cursor()
 

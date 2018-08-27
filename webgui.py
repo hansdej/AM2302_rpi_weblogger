@@ -18,8 +18,6 @@ dbname=pad+'/am2303log.db'
 def printHTTPheader():
     print("Content-type: text/html\n\n")
 
-
-
 # print the HTML head section
 # arguments are the page title and the table for the chart
 def printHTMLHead(title, table):
@@ -106,9 +104,6 @@ def print_graph_script(table):
 
     print(chart_code)
 
-
-
-
 # print the div that contains the graph
 def show_graph():
     print("<h2>Temperature Chart</h2>")
@@ -125,18 +120,27 @@ def show_stats(option):
 
     if option is None:
         option = str(24)
-
-    curs.execute("SELECT timestamp,max(temp) FROM readings WHERE timestamp>datetime('now','-%s hour') AND timestamp<=datetime('now')" % option)
+    query = "SELECT timestamp,max(temp) FROM readings "
+    query += "WHERE timestamp>datetime('now','-%s hour') " % option
+    query += "AND timestamp<=datetime('now')"
+    curs.execute(query)
  #   curs.execute("SELECT timestamp,max(temp) FROM readings WHERE timestamp>datetime('2013-09-19 21:30:02','-%s hour') AND timestamp<=datetime('2013-09-19 21:31:02')" % option)
     rowmax=curs.fetchone()
     rowstrmax="{0}&nbsp&nbsp&nbsp{1}C".format(str(rowmax[0]),str(rowmax[1]))
 
-    curs.execute("SELECT timestamp,min(temp) FROM readings WHERE timestamp>datetime('now','-%s hour') AND timestamp<=datetime('now')" % option)
+    query  = "SELECT timestamp,min(temp) FROM readings "
+    query += "WHERE timestamp>datetime('now','-%s hour"% option
+    query += "AND timestamp<=datetime('now')" 
+
+    curs.execute(query)
  #   curs.execute("SELECT timestamp,min(temp) FROM readings WHERE timestamp>datetime('2013-09-19 21:30:02','-%s hour') AND timestamp<=datetime('2013-09-19 21:31:02')" % option)
     rowmin=curs.fetchone()
     rowstrmin="{0}&nbsp&nbsp&nbsp{1}C".format(str(rowmin[0]),str(rowmin[1]))
 
-    curs.execute("SELECT avg(temp) FROM readings WHERE timestamp>datetime('now','-%s hour') AND timestamp<=datetime('now')" % option)
+    query  = "SELECT avg(temp) FROM readings WHERE "
+    query += "timestamp>datetime('now','-%s hour')" % option
+    query += "AND timestamp<=datetime('now')"
+    curs.execute(query)
 #    curs.execute("SELECT avg(temp) FROM readings WHERE timestamp>datetime('2013-09-19 21:30:02','-%s hour') AND timestamp<=datetime('2013-09-19 21:31:02')" % option)
     rowavg=curs.fetchone()
 
