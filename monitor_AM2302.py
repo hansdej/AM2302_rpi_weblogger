@@ -1,139 +1,98 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
-import sqlite3
-from sqlalchemy import Column, Integer, String, Table, DataTime
-from sqlalchemy.ext.declarative import declarative_base
+simulate_sensor = True
+import storage
 
 import os
 import time
+import datetime
 import glob
+import logging
 
-import Adafruit_DHT
+from storage import AM2302Reading
 
-# Te implementeren:
-# 1) opslaam met smoothing.
-# 2) bijvoegen oude data.
-#       kopieeren oude data naar nieuwe DB
-#       Bijvoegen gladstrijking
-# probreren SQLAlchemy te gebruiken.
+
 # global variables
-speriod     = (15*60)-1
-pad         = '/home/hansdej/Sensorlog/rpi_temp_logger-master'
-pad         = '/home/hansdej/Sensorlog/AM2302_rpi_weblogger'
-dbname      = pad+'/am2302log_smooth.db'
-tablename   = "AM2302"
-columns     = { 'date': 'DATETIME', 'temperature': 'NUMERIC','moisture': 'NUMERIC'}
-## A to be smoothed data storage.
-smooth_columns     = { 'date': 'DATETIME', 'temperature': 'NUMERIC','moisture': 'NUMERIC'}
-# This sqlite database contains a table called "readings"
-# with three columns: timestamp, temp and humid.
+speriod=(15*60)-1
+pad = '/home/hansdej/Sensorlog/rpi_temp_logger-master'
+dbname=pad+'/am2303log.db'
+dbname=pad+'/newdata.db'
 
-# A function to prevent injection.
-def clean_name(some_var):
-    return ''.join(char for char in some_var if char.isalnum())
+class AM2302Sensor(object):
+    """ The Adafruit AM2302 sensor object class.  """
 
-
-class SensorLog():
-    """
-    The object that interfaces to the sqlite3 database.
-    """
-    def __init__(self, filename,tablename):
-        self.filename   = filename
-        self.tablename  = tablename
-
-    def make_datatable(self, filename,tablename, tables):
-        # IN the table we need: timestamp. T, H, T_smooth, H_smooth.
-        tables = ["timestamp", "temperature", "humidity", "T_smooth", "H_smooth"]
-        unist = {"timestamp":'DATETIME',
-                "temperature": "NUMERIC",
-                "humidity": "NUMERIC",
-                "T_smooth": "NUMERIC"
-                "H_smooth": "NUMERIC"}
-        
-        connection = sqlite3.connect(self.filename)
-        cursor     = connection.cursor()
-
-        first   = True
-        for col in columns:
-            if first:
-                # No comma for the first column definition
-                theColumns = ""
-                first   = False
-            else:
-                theColumns += ","
-            theColumns += "\'%s\' \'%s\'"%(clean_name(col),clean_name(column[col]))
-            tablename   = clean_name(tablename)
-
-        cursor.execute("CREATE TABLE %s ( %s )"%(tablename,theColumns))
-        connection.commit()
-        connection.close()
-        
-
-    def log_temperature_and_humidity(self, temp, moisture): 
+    def __init__(self, *args, **kwargs):
         """
-        Could undoubtably be written more generic
-        but I will settle with this for now
+        Initialize it with all the keywords.
         """
-
-        connection = sqlite3.connect(self.filename)
-        cursor     = connection.cursor()
-        table      = clean_name(tablename)
-        cursor.execute("INSERT INTO %s values(datetime('now'), (?), (?))"%table, (temp,moisture))
-        connection.commit()
-        connection.close()
-
-    def store_measurements( self, tablename, data):     
-        """
-        The placeholder for the mentioned, more generic approach.
-        """
-        pass
-
-    def display_data(self):    
-        connection = sqlite3.connect(self.filename)
-        cursor     = connection.cursor()
-        string      = ""
-        for row in cursor.execute("SELECT * FROM %s"%clean_name(self.tablename)):
-            for value in row:
-                string += str(value)+"\t"
-            print(string+"\n")
-        connection.close()    
-            
-class AM2302_sensor:
-    def __init__(self, pin = 4 ):
-        self.pin    =  pin
-        self.sensor = Adafruit_DHT.AM2302
-    def read_temp_and_humid(self): 
-        humidity, temperature   = Adafruit_DHT.read_retry(self.sensor, self.pin)
-        if humidity is not None and temperature is not None:
-            self.humidity       = float(humidity)
-            self.temperature    = float(temperature)
-            return self.temperature,self.humidity 
+        super(AM2302Sensor)
+        # Zodat we ook op een sensorloos systeem kunnen testen.
+        if 'pin' in kwargs:
+            self.pin = kwargs['pin']
         else:
-            print("There was a read error")
-            return None,None
-            
+            self.pin = 4
+
+        for kw,val in kwargs.items():
+            setattr(self, kw, val)
+        self.sensor = None
+
+    def acquire_reading(self, *args, **kwargs):
+        if 'stub' in args:
+            # Testfase zonder sensor.
+            if 't' in kwargs:
+                temperature = kwargs['t']
+            else:
+                temperature = 21.21212121
+            temperature = 21.21212121
+            if 'h' in kwargs:
+                humidity = kwargs['h']
+            else:
+                humidity = 50
+            logging.debug("Stubbing humidity & temperature values")
+        else:
+            import Adafruit_DHT
+            self.sensor = Adafruit_DHT.AM2302
+            humidity, temperature = Adafruit_DHT.read_retry(
+                                            self.sensor,
+                                            self.pin)
+
+        if humidity is not None and temperature is not None:
+            self.temperature= float(temperature)
+            self.humidity   = float(humidity)
+            self.date       = datetime.datetime.now()
+            self.saved      = False
+        else:
+            raise ValueError(
+            'Missing temperature and/or humidity value. (%r,%r)'%(
+                                            temperature,humidity))
+
+    def store_reading(self, db_file_name):
+        # Should:
+        # 1. open a connection to the database
+        # 2. Write the values: time is optional
+        # 3. Close the database
+        # Actually the adding and committing might be more
+        # appropriate in the storage module.
+        date        = self.date
+        temperature = self.temperature
+        humidity    = self.humidity
+        #old_reading = storage.OldData(date, temperature, humidity)
+        reading     = storage.AM2302Reading(date, temperature, humidity)
+        reading.save_to_db(db_file_name)
+
 # main function
-# This is where the program starts 
+# This is where the program starts
 def main():
-    
-    sensor = AM2302_sensor()
+#    while True:
 
-    temperature, humidity = sensor.read_temp_and_humid()
-    while temperature == None:
-        print("A read error: trying again")
-        temperature, humidity = sensor.read_temp_and_humid(pin)
-        # Maybe we should add a little bit of waiting time here?
-
-    print ("temperature= %.1f C, humidity: %.1f %s"%(temperature,humidity, r"%") )
-
-    # Store the perature in the database
-    sensorlog = SensorLog(dbname,tablename)
-    sensorlog.log_temperature_and_humidity(temperature,humidity)
-        # lay the contents of the database
-    sensorlog.display_data()
-
-#        time.sleep(speriod)
-
+    # get the temperature from the device file
+    #temperature get_temp(w1devicefile)
+    sensor = AM2302Sensor(pin=4)
+    sensor.acquire_reading('stub',t=20, h = 48)
+    sensor.store_reading('am2300log.db')
+    time.sleep(1)
+    sensor.acquire_reading('stub',t=22, h = 58)
+    sensor.store_reading('am2300log.db')
 
 if __name__=="__main__":
     main()
