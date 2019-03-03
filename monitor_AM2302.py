@@ -10,11 +10,13 @@ import glob
 import logging
 
 from storage import AM2302Reading
+from os.path import import expanduser
+
 
 
 # global variables
 speriod=(15*60)-1
-pad = '/home/hansdej/Sensorlog/rpi_temp_logger-master'
+pad = os.path.join(expanduser("~"),'Sensorlog/rpi_temp_logger-master'
 dbname=pad+'/am2303log.db'
 dbname=pad+'/newdata.db'
 

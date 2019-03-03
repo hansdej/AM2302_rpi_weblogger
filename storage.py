@@ -144,7 +144,7 @@ class AM2302Reading(THEBASE):
 class DisplayValue(THEBASE):
     """
     The table with the persistent display data:
-    Primarily set up to smoothen outliers that were present at the first Sensor,
+    Primarily set up to smoothen outliers that occurred at the first sensor,
     but this enables a broader range of data processing tricks without changing
     (=corrupting) the original, raw data.
     """
@@ -195,7 +195,7 @@ class DisplayValue(THEBASE):
 
     def smooth(self, in_range=5):
         """
-        smooth the measurement entries in this row and a number of points around it.
+        Smooth the measurement entries in this row and a number of points around it.
         """
         # Eingenlijk is dit een kolom operatie, vooralsnog zie ik deze 'value'
         # als een rij.
@@ -208,22 +208,28 @@ class DisplayValue(THEBASE):
         # 6. Vervang de vreemde waardes in corresponderende records van de
         #     displaytabel.
         pass
-        
 
 oldDBname = 'oldformat.db'
 newDBname = 'newformat.db'
 
 def main(args):
+    """
+    The Main program does nothing.
+    """
     return 1
 
 def dburi(filename):
+    """
+    Complete the URI.
+    """
     return "sqlite:///%s"%filename
 
 
 # Display the contents of the database.
 def fetch_daterange(dbname, start_date=None, end_data=None):
-
-    session = storage.connect(dbname)
+    """
+    """
+    session = connect(dbname)
     q = session.query(OldData).filter(
             OldData.timestamp >= start_date
             ).filter(OldData.timestamp <= end_date)
@@ -233,6 +239,7 @@ def fetch_daterange(dbname, start_date=None, end_data=None):
         measurements.append([r.timestamp, r.temp, r.moist ])
 
     print( "%r"%measurements)
+    return measurements
 
 
 # Dit is een gebruiksscript/functie.
@@ -329,11 +336,11 @@ if True:
         smoothdeltas = lambda x :  x - medfilt(x)
 
         # Establish a mask of Trues or Falses with d as maximum variation
-        masker = lambda x,d: np.abs(x) > np.ones(x.shape)*d
+        masker = lambda x, d: np.abs(x) > np.ones(x.shape)*d
 
         # Mask the values where the median filtered 'replacement' differs
         # more than the delta_level.
-        mask = masker(smoothdeltas(y),delta_level)
+        mask = masker(smoothdeltas(y), delta_level)
 
         # make a list of al indexes where the deviation was bigger than the
         # delta_level.
@@ -346,10 +353,10 @@ if True:
         replacementYs = np.interp( x[badIs], x[goodIs], y[goodIs])
         if copy:
             returnedY = y.copy()
-            returnedY[badIs]=replacementYs
+            returnedY[badIs] = replacementYs
             y = returnedY
         else:
-            y[badIs]=replacementYs
+            y[badIs] = replacementYs
 
         badIs_list = list(badIs[0]) # Simplify to a regular list.
         # return the indixes of the bad values together with the interpolated
@@ -381,7 +388,7 @@ def update_displaylist(db_filename, start=-5, **kwargs):
         for i in badIs:
             record = session.query(AM2302Reading).filter(
                     AM2302Reading.date == allDates[i][0]).first()
-            # Find the Displayvalue for it:        
+            # Find the Displayvalue for it:
             oldValue = record.temperature
             record.temperature = vals[i]
             logging.debug("Record %d, T: %3f => %3f"%( i, oldValue,
