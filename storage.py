@@ -9,6 +9,7 @@ import sys
 import os
 import datetime
 import logging
+import logging.config
 #from pandas import rolling_median
 
 from sqlalchemy import Column, Integer, Float, String, Table, DateTime, NUMERIC
@@ -24,12 +25,12 @@ from sqlalchemy.ext.declarative import declarative_base
 #
 THEBASE = declarative_base()
 
-logging.basicConfig(
-    # filename='logging-basic.log',
-    # stream=logging.StreamHandler(),
-    format='%(levelname)s %(lineno)d: %(message)s',
-    level=logging.DEBUG
-)
+logger = logging.getLogger()
+
+def init_logging(logger):
+    path = os.path.dirname(__file__)
+    filename = os.path.join(path,"logging.ini")
+    logging.config.fileConfig(filename, disable_existing_loggers=True)
 
 def save_to_db(record, database, *args, **kwargs):
         """
@@ -250,7 +251,7 @@ def copy_old_to_new(oldFileName, newFileName, **kwargs):
     try:
         os.remove(newFileName)
     except Exception as e:
-        logging.warning(e.message)
+        logger.warning("%r"%e)
     # Simply copy the old data to a new file: that way we will not mess with
     # the old and multiple files.
     # cost: we have to make sure that the new tables are empty.
@@ -269,7 +270,7 @@ def copy_old_to_new(oldFileName, newFileName, **kwargs):
             tabel.__table__.drop(engine)
             tabel.__table__.create(engine)
         except Exception as e:
-            logging.warning(e.message)
+            logger.warning(e.message)
 
     dBsession = sessionmaker(bind=engine)
     session = dBsession()
@@ -284,7 +285,7 @@ def copy_old_to_new(oldFileName, newFileName, **kwargs):
 #    q = oldsess.query(OldData).filter(OldData.timestamp >= begin
 #                               ).filter(OldData.timestamp <= eind)
 
-    logging.info("start copying")
+    logger.info("start copying")
     cnt = 1
     start = datetime.datetime.now().timestamp()
     # 1 remove existing new tables
@@ -298,15 +299,15 @@ def copy_old_to_new(oldFileName, newFileName, **kwargs):
         cnt += 1
     added = datetime.datetime.now().timestamp()
     adding = added - start
-    logging.info("Adding of %d records in %f s = %f s per record"%( cnt,
+    logger.info("Adding of %d records in %f s = %f s per record"%( cnt,
                                                                     adding,
                                                                     adding/cnt))
-    logging.info("ready to commit %d records"%cnt)
+    logger.info("ready to commit %d records"%cnt)
     session.commit()
     committed = datetime.datetime.now().timestamp()
     committing = committed - added
 
-    logging.info("Finished commit: in %f s: %f s per record"%(committing,
+    logger.info("Finished commit: in %f s: %f s per record"%(committing,
                                                          committing/cnt))
     return
 
@@ -347,7 +348,7 @@ if True:
         badIs  = mask.nonzero()
         goodIs = (~mask).nonzero()
         goodYs = y[goodIs]
-        logging.debug(
+        logger.debug(
                 "Interpolation of %d masked values"%len(badIs[0]) +\
                 "of a total of %d."%len(mask))
         replacementYs = np.interp( x[badIs], x[goodIs], y[goodIs])
@@ -391,7 +392,7 @@ def update_displaylist(db_filename, start=-5, **kwargs):
             # Find the Displayvalue for it:
             oldValue = record.temperature
             record.temperature = vals[i]
-            logging.debug("Record %d, T: %3f => %3f"%( i, oldValue,
+            logger.debug("Record %d, T: %3f => %3f"%( i, oldValue,
                 record.temperature))
         session.commit()
 # TODO TEST OF DIT WERKT!
@@ -421,7 +422,7 @@ def connect(dbFileName):
     return DBsession()
 
 if __name__ == '__main__':
-    pass
+    init_logging(logger)
     # read the database tables into the numpy arrays that are to be smoothed.
     #
 
