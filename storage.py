@@ -125,7 +125,7 @@ class AM2302Reading(THEBASE):
             # linked. An interpolation DisplayValue might be hard to achieve.
             # because it looks as if it needs a primary key from the readings
             # table.
-            self.display_value   = DisplayValue(self,
+            self.displayvalue   = DisplayValue(self,
                                                self.temperature,
                                                self.humidity)
 
@@ -134,13 +134,14 @@ class AM2302Reading(THEBASE):
         Query the database for the display value that belongs to this reading.
         """
         display_value = session.query(DisplayValue).filter(
+
                     DisplayValue.date == allDates[i][0]).first()
         return display_value
 
     def save_to_db(self, database):
         # Needs redefinition because I also want the display value saved here.
         save_to_db(self,database)
-        save_to_db(self.display_value,database)
+        save_to_db(self.displayvalue,database)
 
 class DisplayValue(THEBASE):
     """
@@ -270,7 +271,7 @@ def copy_old_to_new(oldFileName, newFileName, **kwargs):
             tabel.__table__.drop(engine)
             tabel.__table__.create(engine)
         except Exception as e:
-            logger.warning(e.message)
+           logger.warning(e.message)
 
     dBsession = sessionmaker(bind=engine)
     session = dBsession()
@@ -292,10 +293,11 @@ def copy_old_to_new(oldFileName, newFileName, **kwargs):
     # 2 initialize new tables
     # 3 add values from old readings
     for r in q.all():
-        session.add( AM2302Reading( r.timestamp,
+        record = AM2302Reading( r.timestamp,
                                     r.temp,
                                     r.moist)
-                   )
+        session.add(record)
+        session.add(record.displayvalue)
         cnt += 1
     added = datetime.datetime.now().timestamp()
     adding = added - start
