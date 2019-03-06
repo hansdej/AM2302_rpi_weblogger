@@ -87,6 +87,11 @@ class OldData(THEBASE):
         self.timestamp = date
         self.temp = temperature
         self.moist = humidity
+    def __repr__(self):     
+        mesg  = "<%r: %r "%(self.__class__,self.timestamp.ctime())
+        mesg += ", (Temp, humid): (%.1f C, %.2f %% ) >"%(
+                            self.temperature,self.humidity)
+        return mesg
 
     def save_to_db(self, database):
         # Needs redefinition because I also want the display value saved here.
@@ -94,7 +99,9 @@ class OldData(THEBASE):
 
 # The current database layout Readings and displayvalues in different tables.
 # the only reason for this new table, is a link to processed display values,
-# Hence the question is whether we really need all data to be copied.
+# Strictly we can also rely only on a correction table if we want to save
+# storage space, however this moves the processing penalty from acquisition
+# time to retreival time again.
 class AM2302Reading(THEBASE):
     """The new layout of the measurement data"""
     __tablename__='am2302readings'
@@ -128,8 +135,16 @@ class AM2302Reading(THEBASE):
             self.displayvalue   = DisplayValue(self,
                                                self.temperature,
                                                self.humidity)
+    def __repr__(self):
+        """
+        Make the representation a bit more informative.
+        """
+        mesg  = "<%r: %r "%(self.__class__,self.date.ctime())
+        mesg += ", (Temp, humid): (%.1f C, %.2f %% ) >"%(
+                            self.temperature,self.humidity)
+        return mesg
 
-    def get_display_record(self):
+    def get_display_record(self,session):
         """
         Query the database for the display value that belongs to this reading.
         """
@@ -179,6 +194,14 @@ class DisplayValue(THEBASE):
         self.day        = dateToDay(self.date.timestamp())
         self.temperature= temperature
         self.humidity   = humidity
+    def __repr__(self):
+        """
+        Make the representation a bit more informative.
+        """
+        mesg  = "<%r: %r "%(self.__class__,self.date.ctime())
+        mesg += ", (Temp, humid): (%.1f C, %.2f %% ) >"%(
+                            self.temperature,self.humidity)
+        return mesg
 
     #def save_to_db(self, database):
     #    session = connect(database)
@@ -186,14 +209,13 @@ class DisplayValue(THEBASE):
     #    session.commit()
 
 
-    def get_dB_record(self,database):
+    def get_dB_record(self,session):
         """
-        Query the database for the display value that belongs to this reading.
+        Query the database for the Measurement value that belongs to this reading.
         """
-        session = connect(database)
-        display_value = session.query(DisplayValue).filter(
-                    DisplayValue.date == allDates[i][0]).first()
-        return display_value
+        sensor_reading = session.query(AM2302Reading).filter(
+                    AM2302Reading.date == self.date).first()
+        return sensor_reading
 
     def smooth(self, in_range=5):
         """
@@ -323,8 +345,7 @@ import numpy as np
 #       - bepalen welke entries vervangen moeten worden en waarmee.
 #       - wissen van de afwijkende entry.
 #       - Toevoegen van de verbeterde gegevens.
-if True:
-    def determine_replacements(x,y,delta_level, copy=False):
+def determine_replacements(x,y,delta_level, copy=False):
         from scipy.signal import medfilt
         """
         Find extreme variations in x, return an array with their indices and
@@ -379,25 +400,29 @@ def update_displaylist(db_filename, start=-5, **kwargs):
         # De kolommen uit de database in np arrays laden.
         # Er hoeft niets met de de id tabel gedaan te worden. Het lijkt wel nodig
         # om die te linken.
-
-        allDates = session.query(AM2302Reading.date).all()
+        
+        # The [0] is needed to extract the value from the ORM-like object.
+        allDates = [ d[0] for d in session.query(AM2302Reading.date).all()]
+        # Gooi de data in np.arrays:
         dates   = np.array(allDates).squeeze()
         humid   = np.array(session.query(AM2302Reading.humidity).all()).squeeze()
         temp    = np.array(session.query(AM2302Reading.temperature).all()).squeeze()
-
+        # use the linear timestamp, works in Python 3.
         times = np.array([date.timestamp() for date in dates]).squeeze()
+
         badIs, vals  = determine_replacements(times,temp,0.7)
 
         for i in badIs:
-            record = session.query(AM2302Reading).filter(
-                    AM2302Reading.date == allDates[i][0]).first()
+            record = session.query(DisplayValue).filter(
+                    DisplayValue.date == allDates[i]).first()
             # Find the Displayvalue for it:
             oldValue = record.temperature
             record.temperature = vals[i]
             logger.debug("Record %d, T: %3f => %3f"%( i, oldValue,
                 record.temperature))
         session.commit()
-# TODO TEST OF DIT WERKT!
+# Het vervangen lijkt te werken voor 2019, later maar eens kijken of het dingen
+# goed gladstrijkt
 
 
 
