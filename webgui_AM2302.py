@@ -5,20 +5,21 @@ import sys
 import cgi
 import cgitb
 import numpy as np
+import logging
+import logging.config
+logger = logging.getLogger()
 
 
 # global variables
 speriod=(15*60)-1
 dbname='/var/www/templog.db'
 # Redefine the path to the actual databasefile:
-pad = '/home/hansdej/Sensorlog/rpi_temp_logger-master'
-dbname=pad+'/am2303log.db'
+pad = '/home/hansdej/PiSensor/Data'
+dbname=pad+'/am2302log.db'
 
 # print the HTTP header
 def printHTTPheader():
     print("Content-type: text/html\n\n")
-
-
 
 # print the HTML head section
 # arguments are the page title and the table for the chart
@@ -27,7 +28,7 @@ def printHTMLHead(title, table):
     print("    <title>")
     print(title)
     print("    </title>")
-    
+
     print_graph_script(table)
 
     print("</head>")
@@ -105,7 +106,6 @@ def print_graph_script(table):
       function drawChart() {
         var data = google.visualization.arrayToDataTable([
           ['Time', 'Temperature','Humidity'],"""
-          
     chart_code_end="""
         ]);
 

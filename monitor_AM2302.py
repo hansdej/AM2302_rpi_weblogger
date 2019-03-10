@@ -8,16 +8,17 @@ import time
 import datetime
 import glob
 import logging
+import sys
 
 from storage import AM2302Reading
-from os.path import import expanduser
+from os.path import expanduser
 
 
 
 # global variables
 speriod=(15*60)-1
 pad = os.path.join(expanduser("~"),'Sensorlog/rpi_temp_logger-master'
-dbname=pad+'/am2303log.db'
+dbname=pad+'/am2302log.db'
 dbname=pad+'/newdata.db'
 
 class AM2302Sensor(object):
@@ -90,11 +91,12 @@ def main():
     # get the temperature from the device file
     #temperature get_temp(w1devicefile)
     sensor = AM2302Sensor(pin=4)
-    sensor.acquire_reading('stub',t=20, h = 48)
-    sensor.store_reading('am2300log.db')
-    time.sleep(1)
-    sensor.acquire_reading('stub',t=22, h = 58)
-    sensor.store_reading('am2300log.db')
+    if simulate_sensor == True:
+        sensor.acquire_reading('stub',t=20, h = 48)
+        sensor.store_reading('am2300log.db')
+    else:
+        sensor.acquire_reading()
+        sensor.store_reading(dbname)
 
 if __name__=="__main__":
     main()

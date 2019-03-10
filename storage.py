@@ -10,6 +10,8 @@ import os
 import datetime
 import logging
 import logging.config
+
+
 #from pandas import rolling_median
 
 from sqlalchemy import Column, Integer, Float, String, Table, DateTime, NUMERIC
@@ -387,22 +389,21 @@ def determine_replacements(x,y,delta_level, copy=False):
         # replacement values.
         return badIs_list,y
 
-def update_displaylist(db_filename, start=-5, **kwargs):
+def update_displaylist(session, start=-5, **kwargs):
         """
         Cast a number of values from the sensor readings in an np.array, smooth
         this and write and replace them in the database's displaydata table.
         """
         last      = kwargs['end'] if 'end' in kwargs else None
-        # Parse the session if it exists, else we open it.
-        session = connect(db_filename)
 
         # En nu gaan we lussen
         # De kolommen uit de database in np arrays laden.
         # Er hoeft niets met de de id tabel gedaan te worden. Het lijkt wel nodig
         # om die te linken.
-        
+
         # The [0] is needed to extract the value from the ORM-like object.
-        allDates = [ d[0] for d in session.query(AM2302Reading.date).all()]
+        allDates = [ d[0] for d in session.query(
+                                    AM2302Reading.date).all()]
         # Gooi de data in np.arrays:
         dates   = np.array(allDates).squeeze()
         humid   = np.array(session.query(AM2302Reading.humidity).all()).squeeze()
@@ -420,15 +421,18 @@ def update_displaylist(db_filename, start=-5, **kwargs):
             record.temperature = vals[i]
             logger.debug("Record %d, T: %3f => %3f"%( i, oldValue,
                 record.temperature))
+
+        badHs, vals  = determine_replacements(times,humid,0.7)
+        for i in badHs:
+            record = session.query(DisplayValue).filter(
+                    DisplayValue.date == allDates[i]).first()
+            # Find the Displayvalue for it:
+            oldValue = record.humidity
+            record.humidity = vals[i]
+            logger.debug("Record %d, H: %3f => %3f"%( i, oldValue,
+                record.humidity))
+
         session.commit()
-# Het vervangen lijkt te werken voor 2019, later maar eens kijken of het dingen
-# goed gladstrijkt
-
-
-
-
-        session.commit()
-
         # om de laatste 3 records te krijgen:
         # a = sess.query(AM2302Reading).order_by(AM2302Reading.id.desc()).limit(3)[::-1]
 
@@ -450,6 +454,24 @@ def connect(dbFileName):
 
 if __name__ == '__main__':
     init_logging(logger)
+    import numpy as np
+    import datetime
+    import matplotlib as mp
+    import matplotlib.pyplot as plt
+    session = connect("new.db")
+    then_1 = datetime.datetime(2017,1,1)
+    then_2 = datetime.datetime(2017,7,23)
+    fetches = [[AM2302Reading, 'meas'],
+                [DisplayValue ,'disp']
+                ]
+    data = {}
+    for table, the_type in fetches:
+        data[the_type] = np.array( [[
+                d.date.timestamp(), d.temperature, d.humidity
+                ] for d in session.query(
+                table).filter(table.date > then_1
+                ).filter(table.date < then_2).all()] )
+ 
     # read the database tables into the numpy arrays that are to be smoothed.
     #
 
