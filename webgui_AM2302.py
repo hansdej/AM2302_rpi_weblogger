@@ -67,16 +67,17 @@ def get_data(interval):
     if interval == None:
         #curs.execute("SELECT * FROM readings")
         interval = "%d"%24*7*8
+
     curs.execute("SELECT * FROM readings " + \
-                    "WHERE timestamp>datetime('now','-%s hours')" % interval)
-#        curs.execute("SELECT * FROM readings WHERE timestamp>datetime('2013-09-19 21:30:02','-%s hours') AND timestamp<=datetime('2013-09-19 21:31:02')" % interval)
+                 "WHERE timestamp>datetime('now',"+ \
+                 "'-%s hours')" % interval)
 
     rows=curs.fetchall()
 
     conn.close()
     # The output shows up as a list of tuples with n(=3) elements of which
     # the first one is the date.
-    rows = unspike(rows)
+    #rows = unspike(rows)
 
     return rows
 
@@ -201,7 +202,9 @@ def show_stats(option):
     <tr><td><strong>Date/Time</strong></td><td><strong>Temperature</strong></td></tr>
     """
 
-    rows=curs.execute("SELECT * FROM readings WHERE timestamp>datetime('new','-1 hour') AND timestamp<=datetime('new')")
+    rows=curs.execute("SELECT * FROM readings WHERE timestamp>" + \
+                    "datetime('new','-1 hour') " + \
+                    "AND timestamp<=datetime('new')")
  #   rows=curs.execute("SELECT * FROM readings WHERE timestamp>datetime('2013-09-19 21:30:02','-1 hour') AND timestamp<=datetime('2013-09-19 21:31:02')")
     for row in rows:
         rowstr="<tr><td>{0}&emsp;&emsp;</td><td>{1}C</td></tr>\n".format(str(row[0]),str(row[1]))
@@ -285,13 +288,17 @@ def main():
     cgitb.enable()
 
     # get options that may have been passed to this script
-    option=get_option()
-
     try:
-        if option is None:
-            option = str(24*7*8)
+        option=get_option()
     except:
-       option = str(24*7*8)
+        option = None
+    option = str(240)
+
+    #try:
+    #    if option is None:
+    #        option = str(24*7*8)
+    #except:
+    #   option = str(24*7*8)
 
     # get data from the database
     records=get_data(option)
