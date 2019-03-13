@@ -251,20 +251,27 @@ def dburi(filename):
     return "sqlite:///%s"%filename
 
 
+
 # Display the contents of the database.
-def fetch_daterange(dbname, start_date=None, end_data=None):
+def fetch_daterange(session, start_date=None, end_date=None):
     """
     """
-    session = connect(dbname)
     q = session.query(OldData).filter(
             OldData.timestamp >= start_date
             ).filter(OldData.timestamp <= end_date)
     measurements = []
+    mesg = ""
 
     for r in q.all():
-        measurements.append([r.timestamp, r.temp, r.moist ])
+        t = r.timestamp.timestamp()
+        t_label = r.timestamp.isoformat(" ")
+        temp = float(r.temp)
+        humid = float(r.moist)
+        meas=[t, t_label, temp, humid]
+        mesg += "%r\n"%meas
+        measurements.append(meas)
 
-    print( "%r"%measurements)
+    logger.debug( mesg)
     return measurements
 
 

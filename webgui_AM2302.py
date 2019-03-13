@@ -7,6 +7,8 @@ import cgitb
 import numpy as np
 import logging
 import logging.config
+import storage
+import datetime
 logger = logging.getLogger()
 
 
@@ -66,13 +68,13 @@ def get_data(interval):
 
     if interval == None:
         #curs.execute("SELECT * FROM readings")
-        interval = "%d"%24*7*8
+        interval = "%d"%(24*2)
+    now = datetime.datetime.now()
+    then = now - datetime.timedelta(hours=float(interval))
+    session = storage.connect(dbname)
+    data = storage.fetch_daterange(session, start_date=then, end_date=now)
 
-    curs.execute("SELECT * FROM readings " + \
-                 "WHERE timestamp>datetime('now',"+ \
-                 "'-%s hours')" % interval)
-
-    rows=curs.fetchall()
+    rows = data
 
     conn.close()
     # The output shows up as a list of tuples with n(=3) elements of which
@@ -89,7 +91,7 @@ def create_table(rows, indent = None):
 
     for row in rows:
         #if isinstance( row[1],float) and isinstance(row[2], float):
-        rowstr="['%s', %g , %g ],"%(row[0],float(row[1]),float(row[2]))
+        rowstr="['%s', %g , %g ],"%(row[1],float(row[2]),float(row[3]))
         if not "nan" in rowstr:
             chart_table+=indent+rowstr
 
