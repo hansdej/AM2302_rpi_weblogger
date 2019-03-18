@@ -13,7 +13,7 @@ logger = logging.getLogger()
 
 
 # global variables
-speriod=(15*60)-1
+default_duration = 24*7*4
 dbname='/var/www/templog.db'
 # Redefine the path to the actual databasefile:
 pad = '/home/hansdej/PiSensor/Data'
@@ -61,27 +61,27 @@ def unspike( rows ):
 # get data from the database
 # if an interval is passed, 
 # return a list of records from the database
+
+def get_datetimes( hours_str):
+    now     = datetime.datetime.now()
+    then    = now - datetime.timedelta( hours = float( hours_str ))
+    return then, now
+
+
 def get_data(interval):
 
-    conn = sqlite3.connect(dbname)
-    curs = conn.cursor()
-
     if interval == None:
-        #curs.execute("SELECT * FROM readings")
-        interval = "%d"%(24*2)
-    now = datetime.datetime.now()
-    then = now - datetime.timedelta(hours=float(interval))
+        interval = "%d"%(default_duration)
+
+    then, now = get_datetimes(interval)
     session = storage.connect(dbname)
-    data = storage.fetch_daterange(session, start_date=then, end_date=now)
 
-    rows = data
+    data = storage.fetch_daterange(session, then, now)
 
-    conn.close()
     # The output shows up as a list of tuples with n(=3) elements of which
     # the first one is the date.
     #rows = unspike(rows)
-
-    return rows
+    return data
 
 # convert rows from database into a javascript table
 def create_table(rows, indent = None):
@@ -141,9 +141,6 @@ def print_graph_script(table):
 
     return chart_code
 
-
-
-
 # print the div that contains the graph
 def show_graph():
     return """
@@ -153,70 +150,51 @@ def show_graph():
 
 # connect to the db and show some stats
 # argument option is the number of hours
-def show_stats(option):
+def show_stats(hours_str):
 
-    conn=sqlite3.connect(dbname)
-    curs=conn.cursor()
-
-    if option is None:
+    if hours_str is None:
         option = str(24)
+    session = storage.connect(dbname)
 
-    curs.execute("SELECT timestamp,max(temp) FROM readings "+ \
-                 "WHERE timestamp>datetime('now','-%s hour') "% option + \
-                 "AND timestamp<=datetime('now')")
- #   curs.execute("SELECT timestamp,max(temp) FROM readings " + \
- #              "WHERE timestamp>datetime('2013-09-19 21:30:02','-%s hour') "+\
- #              "AND timestamp<=datetime('2013-09-19 21:31:02')" % option)
-    rowmax=curs.fetchone()
-    rowstrmax="{0}&nbsp&nbsp&nbsp{1}C".format(str(rowmax[0]),str(rowmax[1]))
+    then, now = get_datetimes(hours_str)
 
-    curs.execute(   "SELECT timestamp,min(temp) FROM readings "+ \
-                    "WHERE timestamp>datetime('now','-%s hour') " % option + \
-                    "AND timestamp<=datetime('now')")
- #   curs.execute("SELECT timestamp,min(temp) FROM readings " + \
- #              "WHERE timestamp>datetime('2013-09-19 21:30:02','-%s hour') "+\
- #              "AND timestamp<=datetime('2013-09-19 21:31:02')" % option)
-    rowmin=curs.fetchone()
-    rowstrmin="{0}&nbsp&nbsp&nbsp{1}C".format(str(rowmin[0]),str(rowmin[1]))
+    stats = storage.fetch_stats(session, then, now)
 
-    curs.execute("SELECT avg(temp) FROM readings " + \
-                 "WHERE timestamp>datetime(" + \
-                 "'now','-%s hour') " % option + \
-                 "AND timestamp<=datetime('now')" )
-#    curs.execute("SELECT avg(temp) FROM readings " + \
-#                   "WHERE timestamp>datetime(" + \
-#                   "'2013-09-19 21:30:02','-%s hour') " + \
-#                   "AND timestamp<=datetime('2013-09-19 21:31:02')" % option)
-    rowavg=curs.fetchone()
+    t_max_string = "{0}&nbsp&nbsp&nbsp{1:.1f}C".format(*stats["max_t"])
+
+    t_min_string="{0}&nbsp&nbsp&nbsp{1:.1f}C".format(*stats["min_t"])
+    avg_temp = stats["avg_t"][1]
 
 
     stats  ="""
-    <hr
+    <hr>
     <h2>Minumum temperature&nbsp</h2>
-    """+ "%r"%(rowstrmin) + """
+    """+t_min_string + """
     <h2>Maximum temperature</h2>
-    """+ "%r"%(rowstrmax) + """
+    """+ t_max_string + """
     <h2>Average temperature</h2>
-    """+ "%.3f" % rowavg+"C" + """
+    """+ "%.2f" % avg_temp+"C"
+#    + """
+#    <hr>
+#    <h2>In the last hour:</h2>
+#    <table>
+#    <tr><td><strong>Date/Time</strong></td><td><strong>Temperature</strong></td></tr>
+#    """
+#
+#    rows=curs.execute("SELECT * FROM readings WHERE timestamp>" + \
+#                    "datetime('new','-1 hour') " + \
+#                    "AND timestamp<=datetime('new')")
+# #   rows=curs.execute("SELECT * FROM readings WHERE timestamp>datetime('2013-09-19 21:30:02','-1 hour') AND timestamp<=datetime('2013-09-19 21:31:02')")
+#    for row in rows:
+#        rowstr="<tr><td>{0}&emsp;&emsp;</td><td>{1}C</td></tr>\n".format(str(row[0]),str(row[1]))
+#        stats += rowstr
+#    stats += """
+#    </table>
+    """
     <hr>
-    <h2>In the last hour:</h2>
-    <table>
-    <tr><td><strong>Date/Time</strong></td><td><strong>Temperature</strong></td></tr>
     """
 
-    rows=curs.execute("SELECT * FROM readings WHERE timestamp>" + \
-                    "datetime('new','-1 hour') " + \
-                    "AND timestamp<=datetime('new')")
- #   rows=curs.execute("SELECT * FROM readings WHERE timestamp>datetime('2013-09-19 21:30:02','-1 hour') AND timestamp<=datetime('2013-09-19 21:31:02')")
-    for row in rows:
-        rowstr="<tr><td>{0}&emsp;&emsp;</td><td>{1}C</td></tr>\n".format(str(row[0]),str(row[1]))
-        stats += rowstr
-    stats += """
-    </table>
-    <hr>
-    """
-
-    conn.close()
+    #conn.close()
     return stats
 # Het label word de triviale naam van de periode en de waarde natuurlijk de feitelijke waarde van de periode: meestal een integer
 # aantal uren.
@@ -263,19 +241,27 @@ def print_time_selector(option):
 # check that the option is valid
 # and not an SQL injection
 def validate_input(option_str):
-    # check that the option string represents a number
+    """
+    Check that the option string represents a valid number.
+    """
     if option_str.isalnum():
         # check that the option is within a specific range
         if int(option_str) > 0 and int(option_str) <= 168:
             return option_str
         else:
             return None
-    else: 
+    else:
         return None
 
 
 #return the option passed to the script
 def get_option():
+    """
+    Get the options that are passed to the script, for now only the
+    timeinterval, in hours, is used.
+
+    If something is wrong or missing, None is returned.
+    """
     form=cgi.FieldStorage()
     if "timeinterval" in form:
         option = form["timeinterval"].value
@@ -291,19 +277,15 @@ def main():
 
     # get options that may have been passed to this script
     try:
-        option=get_option()
+        hours_str=get_option()
     except:
-        option = None
-    option = str(240)
-
-    #try:
-    #    if option is None:
-    #        option = str(24*7*8)
-    #except:
-    #   option = str(24*7*8)
+        hours_str = None
+    if hours_str == None:
+        hours_str = str(240)
 
     # get data from the database
-    records=get_data(option)
+    records=get_data(hours_str)
+
 
     # print the HTTP header
     page = printHTTPheader()
@@ -326,9 +308,9 @@ def main():
     <body>
     <h1>Raspberry Pi Temperature Logger</h1>\n
     <hr>
-    """ + "%s"%print_time_selector(option)  + """
+    """ + "%s"%print_time_selector(hours_str)  + """
     """ + "%s"%show_graph()                 + """
-    """ + "%s"%show_stats(option)           + """
+    """ + "%s"%show_stats(hours_str)           + """
     </body>
     </html>
     """

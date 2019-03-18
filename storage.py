@@ -250,15 +250,41 @@ def dburi(filename):
     """
     return "sqlite:///%s"%filename
 
+# So we can change this to the new table.
+the_table = OldData
+the_t = OldData.temp
+the_h = OldData.moist
+the_timestamp = OldData.timestamp
+
+
+def fetch_stats(session, start_date, end_date):
+    """
+    """
+    # Abbreviate the query function.
+    the_query = lambda fie,param : session.query(the_timestamp,fie(param)).filter(
+                the_timestamp >= start_date).filter(
+                the_timestamp <= end_date).first()
+    parse = lambda q: (q[0], float(q[1]))
+
+    stats = {   "max_t" : parse(the_query(func.max, the_t)),
+                "avg_t" : parse(the_query(func.avg, the_t)),
+                "min_t" : parse(the_query(func.min, the_t)),
+                "max_h" : parse(the_query(func.max, the_h)),
+                "avg_h" : parse(the_query(func.avg, the_h)),
+                "min_h" : parse(the_query(func.min, the_h))
+            }
+
+    return stats
 
 
 # Display the contents of the database.
-def fetch_daterange(session, start_date=None, end_date=None):
+def fetch_daterange(session, start_date, end_date, with_stats=True):
     """
+    Fetch a complete datarange
     """
-    q = session.query(OldData).filter(
-            OldData.timestamp >= start_date
-            ).filter(OldData.timestamp <= end_date)
+    q = session.query(the_table).filter(
+            the_timestamp >= start_date
+            ).filter(the_timestamp <= end_date)
     measurements = []
     mesg = ""
 
