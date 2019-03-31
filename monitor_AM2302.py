@@ -83,6 +83,10 @@ class AM2302Sensor(object):
         reading     = storage.AM2302Reading(date, temperature, humidity)
         reading.save_to_db(db_file_name)
 
+        # Do the smoothing of the last 20 displayvalues.
+        session = storage.connect(db_file_name)
+        storage.update_displaylist(session, last=20)
+
 # main function
 # This is where the program starts
 def main():
