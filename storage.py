@@ -484,13 +484,12 @@ def determine_replacements(x,y,delta_level, filter='rolling'):
         # replacement values.
         return badIs_list,y
 
-def update_displaylist(session, start_date = None, end_date = None, **kwargs):
+def update_displaylist(session,last=None, start_date = None, end_date = None, **kwargs):
         """
         Cast a number of values from the sensor readings in an np.array, smooth
         this and write and replace them in the database's displaydata table.
+        dates can be used but also the last # of records.
         """
-        last      = kwargs['end'] if 'end' in kwargs else None
-
         # En nu gaan we lussen
         # De kolommen uit de database in np arrays laden.
         # Er hoeft niets met de de id tabel gedaan te worden. Het lijkt wel nodig
@@ -498,14 +497,20 @@ def update_displaylist(session, start_date = None, end_date = None, **kwargs):
 
         # The [0] is needed to extract the value from the ORM-like object.
         allRecords = session.query(AM2302Reading)
-        if not start_date is None:
-            allRecords = allRecords.filter(
+        if not last is None:
+            logger.debug("Interpolating last %d."%last)
+            allRecords = allRecords.order_by(
+                    AM2302Reading.date.desc()).limit(last).all()[::-1]
+        else:
+            if not start_date is None:
+                allRecords = allRecords.filter(
                             start_date <= AM2302Reading.date)
-        if not end_date is None:
-            allRecords = allRecords.filter(
+            if not end_date is None:
+                allRecords = allRecords.filter(
                             AM2302Reading.date <= end_date)
 
-        allRecords = allRecords.all()
+            allRecords = allRecords.all()
+
         logger.debug("Start: %r"% allRecords[0].date)
 
 
