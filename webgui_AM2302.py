@@ -47,7 +47,7 @@ def unspike( rows ):
     dataArray = np.array(rows, dtype=dt)
     for serie in range(dataLength):
         arr = pd.Series(dataArray[:,1+serie].copy() )
-        arr = arr.rolling(3).median()
+        arr = arr.rolling(3, center=True).median()
         arr = arr[1:-1]
         dataArray[1:-1,1+serie] = arr
     # en terug:

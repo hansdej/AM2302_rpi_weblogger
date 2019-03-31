@@ -48,16 +48,15 @@ def save_to_db(record, database, *args, **kwargs):
 
 #THEBASE.save_to_db = save_to_db
 
-
 def get_records_around(session, record, then, number=5,
                        before=None, after=None):
     """
-    Query for a number of records around a certain date.
+    Query for a NUMBER of records around a certain date.
     Obviously the records should contain a 'date' field.
     """
     # If 'before' and 'after' are not set, default to the configured 'number'
     before = number if before is None else before
-    after  = number if after is None else after
+    after  = number if after  is None else after
 
     earlier = session.query(record).filter(record.date <= then
             ).order_by(record.date.asc()
@@ -146,12 +145,11 @@ class AM2302Reading(THEBASE):
                             self.temperature,self.humidity)
         return mesg
 
-    def get_display_record(self,session):
+    def get_display_record(self, session):
         """
         Query the database for the display value that belongs to this reading.
         """
         display_value = session.query(DisplayValue).filter(
-
                     DisplayValue.date == allDates[i][0]).first()
         return display_value
 
@@ -196,6 +194,7 @@ class DisplayValue(THEBASE):
         self.day        = dateToDay(self.date.timestamp())
         self.temperature= temperature
         self.humidity   = humidity
+
     def __repr__(self):
         """
         Make the representation a bit more informative.
@@ -211,7 +210,7 @@ class DisplayValue(THEBASE):
     #    session.commit()
 
 
-    def get_dB_record(self,session):
+    def get_dB_record(self, session):
         """
         Query the database for the Measurement value that belongs to this reading.
         """
@@ -259,9 +258,10 @@ the_timestamp = OldData.timestamp
 
 def fetch_stats(session, start_date, end_date):
     """
+    Get some statistics in the given date range.
     """
     # Abbreviate the query function.
-    the_query = lambda fie,param : session.query(the_timestamp,fie(param)).filter(
+    the_query = lambda fie,param : session.query(the_timestamp, fie(param)).filter(
                 the_timestamp >= start_date).filter(
                 the_timestamp <= end_date).first()
     parse = lambda q: (q[0], float(q[1]))
@@ -283,7 +283,7 @@ def fetch_daterange(session, start_date, end_date, with_stats=True):
     Fetch a complete datarange
     """
     q = session.query(the_table).filter(
-            the_timestamp >= start_date
+                     start_date <= the_timestamp
             ).filter(the_timestamp <= end_date)
     measurements = []
     mesg = ""
@@ -301,6 +301,55 @@ def fetch_daterange(session, start_date, end_date, with_stats=True):
     return measurements
 
 
+def build_new_from_old( dbfile , **kwargs):
+    """
+    Build the new tables from the old data in the same database file.
+    """
+    dB = dburi(dbfile)
+    # Initialise the mechanisms to work with the old DB-layout:
+    engine = create_engine(dB)
+    THEBASE.metadata.bind = engine
+    THEBASE.metadata.create_all()
+    # Verwijder de tabellen met oude data en maak nieuwe aan. Ziet er uit als
+    # een bewerkking die strikt genomen buiten het ORM principe ligt, maar het
+    # werkt.
+    for tabel in AM2302Reading, DisplayValue:
+        try:
+            tabel.__table__.drop(engine)
+            tabel.__table__.create(engine)
+        except Exception as e:
+           logger.warning(e.message)
+
+    dBsession = sessionmaker(bind=engine)
+    session = dBsession()
+
+    q = session.query(OldData)
+
+    logger.info("start copying")
+    cnt = 1
+    start = datetime.datetime.now().timestamp()
+    # 1 remove existing new tables
+    # 2 initialize new tables
+    # 3 add values from old readings
+    for r in q.all():
+        record = AM2302Reading( r.timestamp,
+                                    r.temp,
+                                    r.moist)
+        session.add(record)
+        session.add(record.displayvalue)
+        cnt += 1
+    added = datetime.datetime.now().timestamp()
+    adding = added - start
+    logger.info("Adding of %d records in %f s = %f s per record"%(
+                    cnt, adding, adding/cnt))
+    logger.info("ready to commit %d records"%cnt)
+    session.commit()
+    committed = datetime.datetime.now().timestamp()
+    committing = committed - added
+
+    logger.info("Finished commit: in %f s: %f s per record"%(committing,
+                                                         committing/cnt))
+    return
 # Dit is een gebruiksscript/functie.
 #
 def copy_old_to_new(oldFileName, newFileName, **kwargs):
@@ -371,6 +420,7 @@ def copy_old_to_new(oldFileName, newFileName, **kwargs):
     return
 
 import numpy as np
+import pandas as pd
 
 
 #def do_smooth (dbFileName):
@@ -380,7 +430,7 @@ import numpy as np
 #       - bepalen welke entries vervangen moeten worden en waarmee.
 #       - wissen van de afwijkende entry.
 #       - Toevoegen van de verbeterde gegevens.
-def determine_replacements(x,y,delta_level, copy=False):
+def determine_replacements(x,y,delta_level, filter='rolling'):
         from scipy.signal import medfilt
         """
         Find extreme variations in x, return an array with their indices and
@@ -392,7 +442,23 @@ def determine_replacements(x,y,delta_level, copy=False):
 
         # determine the difference between the data and a median filtered
         # version of it.
-        smoothdeltas = lambda x :  x - medfilt(x)
+        def rolling_filter(x):
+            serie = pd.Series(x)
+            filtered_x = serie.rolling(3, center=True).median()
+            filtered_x = np.array(filtered_x)
+            # Check the first and last for a NaN
+            for i in [0,-1]:
+                if pd.isna(filtered_x[i]):
+                    filtered_x[i] = x[i]
+            return filtered_x
+
+        if filter == 'median':
+            the_filter = medfilt
+        else:
+            the_filter = rolling_filter
+
+        smoothdeltas = lambda x :  x - the_filter(x)
+
 
         # Establish a mask of Trues or Falses with d as maximum variation
         masker = lambda x, d: np.abs(x) > np.ones(x.shape)*d
@@ -410,19 +476,15 @@ def determine_replacements(x,y,delta_level, copy=False):
                 "Interpolation of %d masked values"%len(badIs[0]) +\
                 "of a total of %d."%len(mask))
         replacementYs = np.interp( x[badIs], x[goodIs], y[goodIs])
-        if copy:
-            returnedY = y.copy()
-            returnedY[badIs] = replacementYs
-            y = returnedY
-        else:
-            y[badIs] = replacementYs
+
+        y[badIs] = replacementYs
 
         badIs_list = list(badIs[0]) # Simplify to a regular list.
         # return the indixes of the bad values together with the interpolated
         # replacement values.
         return badIs_list,y
 
-def update_displaylist(session, start=-5, **kwargs):
+def update_displaylist(session, start_date = None, end_date = None, **kwargs):
         """
         Cast a number of values from the sensor readings in an np.array, smooth
         this and write and replace them in the database's displaydata table.
@@ -435,27 +497,39 @@ def update_displaylist(session, start=-5, **kwargs):
         # om die te linken.
 
         # The [0] is needed to extract the value from the ORM-like object.
-        allDates = [ d[0] for d in session.query(
-                                    AM2302Reading.date).all()]
+        allRecords = session.query(AM2302Reading)
+        if not start_date is None:
+            allRecords = allRecords.filter(
+                            start_date <= AM2302Reading.date)
+        if not end_date is None:
+            allRecords = allRecords.filter(
+                            AM2302Reading.date <= end_date)
+
+        allRecords = allRecords.all()
+        logger.debug("Start: %r"% allRecords[0].date)
+
+
+        allDates = [ rec.date for rec in allRecords]
         # Gooi de data in np.arrays:
-        dates   = np.array(allDates).squeeze()
-        humid   = np.array(session.query(AM2302Reading.humidity).all()).squeeze()
-        temp    = np.array(session.query(AM2302Reading.temperature).all()).squeeze()
+        dates = np.array(allDates).squeeze()
+        humid = np.array([ rec.humidity for rec in allRecords]).squeeze()
+        temp  = np.array([ rec.temperature for rec in allRecords]).squeeze()
         # use the linear timestamp, works in Python 3.
         times = np.array([date.timestamp() for date in dates]).squeeze()
 
         badIs, vals  = determine_replacements(times,temp,0.7)
 
         for i in badIs:
+            # Locate the DisplayValue associated with the AM2302Reading.
             record = session.query(DisplayValue).filter(
                     DisplayValue.date == allDates[i]).first()
-            # Find the Displayvalue for it:
+            # Store the Displayvalue for later log-printing:
             oldValue = record.temperature
             record.temperature = vals[i]
             logger.debug("Record %d, T: %3f => %3f"%( i, oldValue,
                 record.temperature))
 
-        badHs, vals  = determine_replacements(times,humid,0.7)
+        badHs, vals  = determine_replacements(times,humid,3.0)
         for i in badHs:
             record = session.query(DisplayValue).filter(
                     DisplayValue.date == allDates[i]).first()
@@ -491,7 +565,10 @@ if __name__ == '__main__':
     import datetime
     import matplotlib as mp
     import matplotlib.pyplot as plt
-    session = connect("new.db")
+
+    #copy_old_to_new( "am2303log.db", 'new.db')
+    sess   = connect("oud.db")
+    # een bereik met spikes:
     then_1 = datetime.datetime(2017,1,1)
     then_2 = datetime.datetime(2017,7,23)
     fetches = [[AM2302Reading, 'meas'],
@@ -499,12 +576,27 @@ if __name__ == '__main__':
                 ]
     data = {}
     for table, the_type in fetches:
-        data[the_type] = np.array( [[
-                d.date.timestamp(), d.temperature, d.humidity
-                ] for d in session.query(
-                table).filter(table.date > then_1
-                ).filter(table.date < then_2).all()] )
- 
+        records = sess.query(table).filter(
+                table.date > then_1).filter(
+                table.date < then_2).all()
+
+        data[the_type] = np.array( [
+                [ r.date.timestamp(),
+                r.temperature,
+                r.humidity ] for r in records])
+
+    if True:
+        fig,ax = plt.subplots()
+        plt.ion()
+        sens_x = data['meas'][:,0]
+        sens = data['meas'][:,1]
+        disp_x = data['disp'][:,0]
+        disp = data['disp'][:,1]
+        ax.plot( sens_x, sens, disp_x, disp)
+
+
+
+
     # read the database tables into the numpy arrays that are to be smoothed.
     #
 
