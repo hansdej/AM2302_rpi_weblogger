@@ -301,7 +301,8 @@ def fetch_daterange(session, start_date, end_date, with_stats=True):
     return measurements
 
 
-def build_new_from_old( dbfile , **kwargs):
+def build_new_from_old( dbfile , start_date=None, end_date=None,
+        clear_tables=False, **kwargs):
     """
     Build the new tables from the old data in the same database file.
     """
@@ -313,17 +314,22 @@ def build_new_from_old( dbfile , **kwargs):
     # Verwijder de tabellen met oude data en maak nieuwe aan. Ziet er uit als
     # een bewerkking die strikt genomen buiten het ORM principe ligt, maar het
     # werkt.
-    for tabel in AM2302Reading, DisplayValue:
-        try:
-            tabel.__table__.drop(engine)
-            tabel.__table__.create(engine)
-        except Exception as e:
-           logger.warning(e.message)
+    if clear_tables:
+        for tabel in AM2302Reading, DisplayValue:
+            try:
+                tabel.__table__.drop(engine)
+                tabel.__table__.create(engine)
+            except Exception as e:
+                logger.warning(e.message)
 
     dBsession = sessionmaker(bind=engine)
     session = dBsession()
 
     q = session.query(OldData)
+    if not start_date is None:
+        q = q.filter(start_date <= OldData.timestamp)
+    if not end_date is None:
+        q = q.filter(OldData.timestamp <= end_date)
 
     logger.info("start copying")
     cnt = 1
@@ -448,7 +454,11 @@ def determine_replacements(x,y,delta_level, filter='rolling'):
             filtered_x = np.array(filtered_x)
             # Check the first and last for a NaN
             for i in [0,-1]:
-                if pd.isna(filtered_x[i]):
+                try:
+                    if pd.isna(filtered_x[i]):
+                        filtered_x[i] = x[i]
+                except:
+                    # not all versions of pandas have isna.
                     filtered_x[i] = x[i]
             return filtered_x
 

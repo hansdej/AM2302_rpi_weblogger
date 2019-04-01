@@ -8,6 +8,7 @@ from storage import copy_old_to_new
 from storage import determine_replacements
 from storage import build_new_from_old, connect, update_displaylist
 import storage
+import datetime
 logger = storage.logger
 storage.init_logging(logger)
 
@@ -24,7 +25,23 @@ def main():
     # tested.
 
     the_file = './am2302log.db'
-    build_new_from_old(the_file)
+    start_date = datetime.datetime(2017,1,1)
+    month = 24*365.25/12
+    generate_end_date = lambda s: s + datetime.timedelta(hours=2*month)
+    end_date = generate_end_date(start_date)
+    now  = datetime.datetime.now()
+    dates = []
+    while end_date <= now:
+        end_date = generate_end_date(start_date)
+        dates.append([start_date, end_date])
+        start_date = end_date
+
+    dates.append([end_date, now])
+    clear_t =True
+    for start, end in dates:    
+        build_new_from_old(the_file,start_date=start,
+            end_date=end,clear_tables=clear_t)
+        clear_t=False
     session= connect(the_file)
     update_displaylist(session)
     return 0
