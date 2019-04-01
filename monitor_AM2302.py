@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-simulate_sensor = True
+simulate_sensor = False
 import storage
 
 import os
@@ -17,9 +17,9 @@ from os.path import expanduser
 
 # global variables
 speriod=(15*60)-1
-pad = os.path.join(expanduser("~"),'Sensorlog/rpi_temp_logger-master'
-dbname=pad+'/am2302log.db'
+pad = os.path.join(expanduser("~"),'PiSensor/AM2302_rpi_weblogger')
 dbname=pad+'/newdata.db'
+dbname=pad+'/am2302log.db'
 
 class AM2302Sensor(object):
     """ The Adafruit AM2302 sensor object class.  """

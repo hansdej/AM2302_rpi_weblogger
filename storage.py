@@ -155,8 +155,9 @@ class AM2302Reading(THEBASE):
 
     def save_to_db(self, database):
         # Needs redefinition because I also want the display value saved here.
+
         save_to_db(self,database)
-        save_to_db(self.displayvalue,database)
+        #save_to_db(self.displayvalue,database)
 
 class DisplayValue(THEBASE):
     """

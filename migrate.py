@@ -42,6 +42,7 @@ def main():
         build_new_from_old(the_file,start_date=start,
             end_date=end,clear_tables=clear_t)
         clear_t=False
+        logger.debug("start: %r, end: %r"%(start_date, end_date)ls 
     session= connect(the_file)
     update_displaylist(session)
     return 0
