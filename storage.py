@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Deze moeten toegevoegd kunnen worden in scenario's:
+    Deze moeten toegevoegd kunnen worden in scenario's:
     Bij de eerste conversie: de projecties van alle meetwaarde,
     Bij uitlezen sensoren: nieuwe records aanmaken en indien nodig oude
     records updaten.
@@ -91,8 +91,11 @@ class OldData(THEBASE):
     def __repr__(self):     
         mesg  = "<%r: %r "%(self.__class__,self.timestamp.ctime())
         mesg += ", (Temp, humid): (%.1f C, %.2f %% ) >"%(
-                            self.temperature,self.humidity)
+                            self.temp, self.moist)
         return mesg
+    def copy(self):
+        return OldData(self.timestamp,self.temp,self.moist)
+        
 
     def save_to_db(self, database):
         # Needs redefinition because I also want the display value saved here.
@@ -288,21 +291,18 @@ def fetch_daterange(session, start_date, end_date, with_stats=True):
             ).filter(the_timestamp <= end_date)
     measurements = []
     mesg = ""
-
     for r in q.all():
         t = r.timestamp.timestamp()
         t_label = r.timestamp.isoformat(" ")
         temp = float(r.temp)
         humid = float(r.moist)
-        meas=[t, t_label, temp, humid]
+        meas = [t, t_label, temp, humid]
         mesg += "%r\n"%meas
         measurements.append(meas)
-
-    logger.debug( mesg)
+    logger.debug(mesg)
     return measurements
 
-
-def build_new_from_old( dbfile , start_date=None, end_date=None,
+def build_new_from_old(dbfile , start_date=None, end_date=None,
         clear_tables=False, **kwargs):
     """
     Build the new tables from the old data in the same database file.
@@ -359,6 +359,77 @@ def build_new_from_old( dbfile , start_date=None, end_date=None,
     return
 # Dit is een gebruiksscript/functie.
 #
+def sync_old_to_new(from_file, to_file, days_ago=40, **kwargs):
+    # Continuiteit of aanvulfunctie: wanneer de grote blob oude data overgezet
+    # is kan de oude acquisitie nog lopen. Deze functie moet ontbrekende
+    # waardes opsporen en alsnog synchroniseren voordat we op de nieuwe methode
+    # zitten.
+    in_sess = connect(from_file)
+    out_sess = connect(to_file)
+    # for in-records that are not in the out-records yet:
+    # add to the to-be-added-records.
+    # Primary keys: OldData.timestamp
+    #               AM2302Reading.date
+    # Nog een probleem: dubbele registraties.
+
+
+    if days_ago is None:
+        then = 0
+        query = lambda s, t: s.query(OldData.timestamp).all()
+    else:
+        then = datetime.datetime.now() - \
+                        datetime.timedelta(days=days_ago)
+        query = lambda s,then: s.query(OldData.timestamp).filter(
+                    OldData.timestamp > then).all()
+
+    [in_dates, to_dates]  = [query(s, then) for s in [in_sess, out_sess]]
+
+
+    # Duurt lang op volledige bereik te doen, getest en ok op 20 dagen.
+    sync_dates = [d[0] for d in in_dates if d not in to_dates]
+    # Now we only need to add those missing dates.
+    if len(sync_dates)< 1:
+        logger.info("No diffs found in the last %r days"%days_ago)
+    for date in sync_dates:
+        old_r = in_sess.query(OldData).filter(
+                            OldData.timestamp==date).first()
+        #newrecord = AM2302Reading(old_r.timestamp,
+        #                    old_r.temp,
+        #                    old_r.moist)
+        # Add the old record to the new file and generate the new record.
+        try:
+            logger.debug( "Adding %r"%date)
+            out_sess.add(old_r.copy())
+
+        #    out_sess.add(newrecord)
+        except Exception as e:
+            logger.warning("Adding failed with: %s"%e.message)
+    out_sess.commit()
+
+
+def clean_duplicates(in_file, days_ago=40, **kwargs):
+    """
+    Due to some mistake, measurements were recorded twice in the databas.
+    Need to correct this.
+    """
+    sess = connect(in_file)
+    then = datetime.datetime.now() - datetime.timedelta(days=days_ago)
+    all_dates = sess.query(OldData).filter(
+                    OldData.timestamp > then).all()
+
+    done = []
+    duplicates = []
+
+    for record in all_dates:
+        date =record.timestamp
+        if date in done:
+            duplicates.extend(record)
+        else:
+            done.extend(date)
+    # No duplicates detected: the old table was not set up with timestamp as
+    # primary key.
+
+
 def copy_old_to_new(oldFileName, newFileName, **kwargs):
     """ copy_old_to_new(oldDBname,newDBname)"""
     from shutil import copyfile
@@ -542,7 +613,8 @@ def update_displaylist(session,last=None, start_date = None, end_date = None, **
             # Store the Displayvalue for later log-printing:
             oldValue = record.temperature
             record.temperature = vals[i]
-            logger.debug("Record %d, T: %3f => %3f"%( i, oldValue,
+            logger.debug("Record %r, T: %3f => %3f"%(
+            record.daterecord.date.ctime(), oldValue,
                 record.temperature))
 
         badHs, vals  = determine_replacements(times,humid,3.0)
@@ -552,7 +624,7 @@ def update_displaylist(session,last=None, start_date = None, end_date = None, **
             # Find the Displayvalue for it:
             oldValue = record.humidity
             record.humidity = vals[i]
-            logger.debug("Record %d, H: %3f => %3f"%( i, oldValue,
+            logger.debug("%r, H: %3f => %3f"%( record.date.ctime(), oldValue,
                 record.humidity))
 
         session.commit()
