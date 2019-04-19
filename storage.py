@@ -387,7 +387,7 @@ def sync_old_to_new(from_file, to_file, days_ago=40, **kwargs):
     # Now we only need to add those missing dates.
     if len(sync_recs)< 1:
         logger.info("No diffs found in the last %r days"%days_ago)
-    for rec  in sync_recs[:200]:
+    for rec  in sync_recs:
         #newrecord = AM2302Reading(old_r.timestamp,
         #                    old_r.temp,
         #                    old_r.moist)
@@ -400,30 +400,6 @@ def sync_old_to_new(from_file, to_file, days_ago=40, **kwargs):
         except Exception as e:
             logger.warning("Adding failed with: %s"%e.message)
     out_sess.commit()
-
-
-def clean_duplicates(in_file, days_ago=40, **kwargs):
-    """
-    Due to some mistake, measurements were recorded twice in the databas.
-    Need to correct this.
-    """
-    sess = connect(in_file)
-    then = datetime.datetime.now() - datetime.timedelta(days=days_ago)
-    all_dates = sess.query(OldData).filter(
-                    OldData.timestamp > then).all()
-
-    done = []
-    duplicates = []
-
-    for record in all_dates:
-        date =record.timestamp
-        if date in done:
-            duplicates.extend(record)
-        else:
-            done.extend(date)
-    # No duplicates detected: the old table was not set up with timestamp as
-    # primary key.
-
 
 def copy_old_to_new(oldFileName, newFileName, **kwargs):
     """ copy_old_to_new(oldDBname,newDBname)"""
@@ -668,7 +644,7 @@ if __name__ == '__main__':
                 r.temperature,
                 r.humidity ] for r in records])
 
-    if True:
+    if False :
         fig,ax = plt.subplots()
         plt.ion()
         sens_x = data['meas'][:,0]
