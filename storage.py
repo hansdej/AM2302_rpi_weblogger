@@ -372,34 +372,29 @@ def sync_old_to_new(from_file, to_file, days_ago=40, **kwargs):
     #               AM2302Reading.date
     # Nog een probleem: dubbele registraties.
 
-
-    if days_ago is None:
-        then = 0
-        query = lambda s, t: s.query(OldData.timestamp).all()
-    else:
+    in_recs = in_sess.query(OldData)
+    out_dates = out_sess.query(OldData.timestamp)
+    if days_ago is not None:
         then = datetime.datetime.now() - \
                         datetime.timedelta(days=days_ago)
-        query = lambda s,then: s.query(OldData.timestamp).filter(
-                    OldData.timestamp > then).all()
-
-    [in_dates, to_dates]  = [query(s, then) for s in [in_sess, out_sess]]
-
+        in_recs = in_recs.filter( OldData.timestamp > then)
+        out_dates = out_dates.filter( OldData.timestamp > then)
+    in_recs = in_recs.all()
+    out_dates = [d[0] for d in out_dates.all()]
 
     # Duurt lang op volledige bereik te doen, getest en ok op 20 dagen.
-    sync_dates = [d[0] for d in in_dates if d not in to_dates]
+    sync_recs = [r.copy() for r in in_recs if r.timestamp not in out_dates]
     # Now we only need to add those missing dates.
-    if len(sync_dates)< 1:
+    if len(sync_recs)< 1:
         logger.info("No diffs found in the last %r days"%days_ago)
-    for date in sync_dates:
-        old_r = in_sess.query(OldData).filter(
-                            OldData.timestamp==date).first()
+    for rec  in sync_recs[:200]:
         #newrecord = AM2302Reading(old_r.timestamp,
         #                    old_r.temp,
         #                    old_r.moist)
         # Add the old record to the new file and generate the new record.
         try:
-            logger.debug( "Adding %r"%date)
-            out_sess.add(old_r.copy())
+            logger.debug( "Adding %r"%rec.timestamp)
+            out_sess.add(rec)
 
         #    out_sess.add(newrecord)
         except Exception as e:
