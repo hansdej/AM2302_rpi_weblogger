@@ -148,6 +148,16 @@ class AM2302Reading(THEBASE):
                             self.temperature,self.humidity)
         return mesg
 
+    def refresh(self, temperature, humidity):
+        """
+        To make updating easier.
+        """
+        self.temperature = temperature
+        self.humidity = humidity
+        self.displayvalue.temperature = temperature
+        self.displayvalue.humidity = humidity
+
+
     def get_display_record(self, session):
         """
         Query the database for the display value that belongs to this reading.
@@ -302,8 +312,8 @@ def fetch_daterange(session, start_date, end_date, with_stats=True):
     logger.debug(mesg)
     return measurements
 
-def build_new_from_old(dbfile , start_date=None, end_date=None,
-        clear_tables=False, **kwargs):
+def build_new_from_old(dbfile, days_ago=20, start_date=None,
+        replace_on_exist=False, clear_tables=False, **kwargs):
     """
     Build the new tables from the old data in the same database file.
     """
@@ -327,27 +337,52 @@ def build_new_from_old(dbfile , start_date=None, end_date=None,
     session = dBsession()
 
     q = session.query(OldData)
+
+    if start_date is None:
+        now = datetime.datetime.now()
+    else:
+        now = start_date
+
+    if days_ago is None:
+        then = None
+    else:
+        then = now - datetime.timedelta(days=days_ago)
+
     if not start_date is None:
-        q = q.filter(start_date <= OldData.timestamp)
-    if not end_date is None:
-        q = q.filter(OldData.timestamp <= end_date)
+        q = q.filter( OldData.timestamp <= now)
+
+    if not then is None:
+        q = q.filter(then <= OldData.timestamp  )
 
     logger.info("start copying")
     cnt = 1
+    added =0
     start = datetime.datetime.now().timestamp()
     # 1 remove existing new tables
     # 2 initialize new tables
     # 3 add values from old readings
+    # TODO: If a value already exist, we run into trouble.
     for r in q.all():
-        record = AM2302Reading( r.timestamp,
+        # Check if the record is already there:
+        existing_records = session.query(AM2302Reading).filter(
+                    AM2302Reading.date == r.timestamp).all()
+        if len(existing_records) > 0:
+            # the record already exists, are we gonna replace it?
+            if replace_on_exist:
+                record = existing_record[0]
+                record.refresh(r.temp,r.moist)
+            else:
+                logger.debug("skipping record at %r"%r.timestamp)
+        else:
+            record = AM2302Reading( r.timestamp,
                                     r.temp,
                                     r.moist)
-        session.add(record)
-        session.add(record.displayvalue)
-        cnt += 1
-    added = datetime.datetime.now().timestamp()
-    adding = added - start
-    logger.info("Adding of %d records in %f s = %f s per record"%(
+            session.add(record)
+            session.add(record.displayvalue)
+            cnt += 1
+            added = datetime.datetime.now().timestamp()
+            adding = added - start
+            logger.info("Adding of %d records in %f s = %f s per record"%(
                     cnt, adding, adding/cnt))
     logger.info("ready to commit %d records"%cnt)
     session.commit()
@@ -360,6 +395,12 @@ def build_new_from_old(dbfile , start_date=None, end_date=None,
 # Dit is een gebruiksscript/functie.
 #
 def sync_old_to_new(from_file, to_file, days_ago=40, **kwargs):
+    """
+    Synchronise the old file with the new file.  Only by copying the
+    OldData-records from the old file into the new file table.
+    After this, other routines can be called to generate the new AM2302Recods
+    and corresponding Display values.
+    """
     # Continuiteit of aanvulfunctie: wanneer de grote blob oude data overgezet
     # is kan de oude acquisitie nog lopen. Deze functie moet ontbrekende
     # waardes opsporen en alsnog synchroniseren voordat we op de nieuwe methode
@@ -383,6 +424,7 @@ def sync_old_to_new(from_file, to_file, days_ago=40, **kwargs):
     out_dates = [d[0] for d in out_dates.all()]
 
     # Duurt lang op volledige bereik te doen, getest en ok op 20 dagen.
+    # Determin the records that need to be synchronised:
     sync_recs = [r.copy() for r in in_recs if r.timestamp not in out_dates]
     # Now we only need to add those missing dates.
     if len(sync_recs)< 1:
@@ -402,15 +444,16 @@ def sync_old_to_new(from_file, to_file, days_ago=40, **kwargs):
     out_sess.commit()
 
 def copy_old_to_new(oldFileName, newFileName, **kwargs):
-    """ copy_old_to_new(oldDBname,newDBname)"""
+    """
+    Simply copy the old data to a new file: that way we will not mess with
+    the old and multiple files.
+    cost: we have to make sure that the new tables are empty.
+    """
     from shutil import copyfile
     try:
         os.remove(newFileName)
     except Exception as e:
         logger.warning("%r"%e)
-    # Simply copy the old data to a new file: that way we will not mess with
-    # the old and multiple files.
-    # cost: we have to make sure that the new tables are empty.
     copyfile(oldFileName, newFileName)
 
     dB = dburi(newFileName)
@@ -537,7 +580,7 @@ def determine_replacements(x,y,delta_level, filter='rolling'):
         # replacement values.
         return badIs_list,y
 
-def update_displaylist(session,last=None, start_date = None, end_date = None, **kwargs):
+def update_displaylist(session, days_ago=20, start_date=None, **kwargs):
         """
         Cast a number of values from the sensor readings in an np.array, smooth
         this and write and replace them in the database's displaydata table.
@@ -549,25 +592,27 @@ def update_displaylist(session,last=None, start_date = None, end_date = None, **
         # om die te linken.
 
         # The [0] is needed to extract the value from the ORM-like object.
-        allRecords = session.query(AM2302Reading)
-        if not last is None:
-            logger.debug("Interpolating last %d."%last)
-            allRecords = allRecords.order_by(
-                    AM2302Reading.date.desc()).limit(last).all()[::-1]
+        records = session.query(AM2302Reading)
+        if start_date is None:
+            now = datetime.datetime.now()
         else:
-            if not start_date is None:
-                allRecords = allRecords.filter(
-                            start_date <= AM2302Reading.date)
-            if not end_date is None:
-                allRecords = allRecords.filter(
-                            AM2302Reading.date <= end_date)
+            now =start_date
 
-            allRecords = allRecords.all()
+        if days_ago is None:
+            then = None
+        else:
+            then = now - datetime.timedelta(days=days_ago)
 
-        logger.debug("Start: %r"% allRecords[0].date)
+        records = records.filter( AM2302Reading.date <= now)
+
+        if not then is None:
+            record = record.filter( then <= AM2302Reading.date )
+
+        logger.debug("Start: %r"% records[0].date)
 
 
-        allDates = [ rec.date for rec in allRecords]
+        allDates = [ rec.date for rec in records]
+
         # Gooi de data in np.arrays:
         dates = np.array(allDates).squeeze()
         humid = np.array([ rec.humidity for rec in allRecords]).squeeze()
@@ -585,7 +630,8 @@ def update_displaylist(session,last=None, start_date = None, end_date = None, **
             oldValue = record.temperature
             record.temperature = vals[i]
             logger.debug("Record %r, T: %3f => %3f"%(
-            record.daterecord.date.ctime(), oldValue,
+                record.date.ctime(),
+                oldValue,
                 record.temperature))
 
         badHs, vals  = determine_replacements(times,humid,3.0)
