@@ -265,9 +265,11 @@ def dburi(filename):
 
 # So we can change this to the new table.
 the_table = OldData
-the_t = OldData.temp
-the_h = OldData.moist
+the_table = DisplayValue
+the_t = DisplayValue.temperature
+the_h = DisplayValue.humidity
 the_timestamp = OldData.timestamp
+the_timestamp = DisplayValue.date
 
 
 def fetch_stats(session, start_date, end_date):
@@ -301,11 +303,15 @@ def fetch_daterange(session, start_date, end_date, with_stats=True):
             ).filter(the_timestamp <= end_date)
     measurements = []
     mesg = ""
+    #TODO: make these humidity and temperature values independent of the table:
+    # DisplayValues and Readings and so on.
     for r in q.all():
-        t = r.timestamp.timestamp()
-        t_label = r.timestamp.isoformat(" ")
-        temp = float(r.temp)
-        humid = float(r.moist)
+        t = r.date.timestamp()
+        t_label = r.date.isoformat(" ")
+        #temp = float(r.temp)
+        #humid = float(r.moist)
+        temp = float(r.temperature)
+        humid = float(r.humidity)
         meas = [t, t_label, temp, humid]
         mesg += "%r\n"%meas
         measurements.append(meas)

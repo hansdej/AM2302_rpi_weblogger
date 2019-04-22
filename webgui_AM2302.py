@@ -74,8 +74,8 @@ def get_data(interval):
         interval = "%d"%(default_duration)
 
     then, now = get_datetimes(interval)
+    #a = input("now = %r"%now)
     session = storage.connect(dbname)
-
     data = storage.fetch_daterange(session, then, now)
 
     # The output shows up as a list of tuples with n(=3) elements of which
