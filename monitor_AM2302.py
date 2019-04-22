@@ -19,7 +19,7 @@ from os.path import expanduser
 speriod=(15*60)-1
 pad = os.path.join(expanduser("~"),'PiSensor/AM2302_rpi_weblogger')
 dbname=pad+'/newdata.db'
-dbname=pad+'/am2302log.db'
+dbname=pad+'/new.db'
 
 class AM2302Sensor(object):
     """ The Adafruit AM2302 sensor object class.  """
@@ -85,7 +85,7 @@ class AM2302Sensor(object):
 
         # Do the smoothing of the last 20 displayvalues.
         session = storage.connect(db_file_name)
-        storage.update_displaylist(session, last=20)
+        storage.update_displaylist(session, days_ago=1)
 
 # main function
 # This is where the program starts

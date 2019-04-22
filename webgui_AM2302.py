@@ -210,7 +210,7 @@ def print_time_selector(option):
 
     used_valid_option = False
     options_string = ''
-    for hours in [6, 12, 24, 168]:
+    for hours in [6, 12, 24,48, 168, 744]:
 
         options_string += '\t\t\t<option value="%d" '%hours
 
@@ -225,10 +225,7 @@ def print_time_selector(option):
             options_string += ' %s days.</option>'%days
         else:
             weeks = "%.1f"%(1.0*hours/(7.0*24.0))
-            if weeks > 1:
-                options_string += ' %s weeks.</option>'%weeks
-            else:
-                options_string += ' 1 week.</option>'%weeks
+            options_string += ' %s weeks.</option>'%weeks
         options_string += "\n"
     options_string += """        </select>
         <input type="submit" value="Display">
@@ -246,7 +243,7 @@ def validate_input(option_str):
     """
     if option_str.isalnum():
         # check that the option is within a specific range
-        if int(option_str) > 0 and int(option_str) <= 168:
+        if int(option_str) > 0 and int(option_str) <= 1680:
             return option_str
         else:
             return None
