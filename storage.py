@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-    Deze moeten toegevoegd kunnen worden in scenario's:
-    Bij de eerste conversie: de projecties van alle meetwaarde,
-    Bij uitlezen sensoren: nieuwe records aanmaken en indien nodig oude
-    records updaten.
+Deze moeten toegevoegd kunnen worden in scenario's:
+Bij de eerste conversie: de projecties van alle meetwaarde,
+Bij uitlezen sensoren: nieuwe records aanmaken en indien nodig oude
+records updaten.
 """
 import sys
 import os
@@ -312,7 +312,7 @@ def fetch_daterange(session, start_date, end_date, with_stats=True):
     logger.debug(mesg)
     return measurements
 
-def build_new_from_old(dbfile, days_ago=20, start_date=None,
+def build_new_from_old(dbfile, days_ago=2, start_date=None,
         replace_on_exist=False, clear_tables=False, **kwargs):
     """
     Build the new tables from the old data in the same database file.
@@ -606,7 +606,7 @@ def update_displaylist(session, days_ago=20, start_date=None, **kwargs):
         records = records.filter( AM2302Reading.date <= now)
 
         if not then is None:
-            record = record.filter( then <= AM2302Reading.date )
+            records = records.filter( then <= AM2302Reading.date )
 
         logger.debug("Start: %r"% records[0].date)
 
@@ -615,8 +615,8 @@ def update_displaylist(session, days_ago=20, start_date=None, **kwargs):
 
         # Gooi de data in np.arrays:
         dates = np.array(allDates).squeeze()
-        humid = np.array([ rec.humidity for rec in allRecords]).squeeze()
-        temp  = np.array([ rec.temperature for rec in allRecords]).squeeze()
+        humid = np.array([ rec.humidity for rec in records]).squeeze()
+        temp  = np.array([ rec.temperature for rec in records]).squeeze()
         # use the linear timestamp, works in Python 3.
         times = np.array([date.timestamp() for date in dates]).squeeze()
 
