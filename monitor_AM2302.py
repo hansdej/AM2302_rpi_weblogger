@@ -18,8 +18,7 @@ from os.path import expanduser
 # global variables
 speriod=(15*60)-1
 pad = os.path.join(expanduser("~"),'PiSensor/AM2302_rpi_weblogger')
-dbname=pad+'/newdata.db'
-dbname=pad+'/new.db'
+dbname=pad+'/../Data/am2302log.db'
 
 class AM2302Sensor(object):
     """ The Adafruit AM2302 sensor object class.  """
